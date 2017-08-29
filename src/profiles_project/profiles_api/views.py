@@ -1,5 +1,5 @@
 from django.shortcuts import render
-
+from rest_framework import serializers
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -137,13 +137,22 @@ class LoginViewSet(viewsets.ViewSet):
 
 class UserProfileFeedViewSet(viewsets.ModelViewSet):
     """Handles creating, reading and updating profile feed items."""
-
     authentication_classes = (TokenAuthentication,)
-    serializer_class = serializers.ProfileFeedItemSerializer
     queryset = models.ProfileFeedItem.objects.all()
+    serializer_class = serializers.ProfileFeedItemSerializer
     permission_classes = (permissions.PostOwnStatus, IsAuthenticated)
+    def create(self, request, *args, **kwargs):
+        many = isinstance(request.data, list)
+        serializer = self.get_serializer(data=request.data, many=many)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, headers=headers)
 
     def perform_create(self, serializer):
-        """Sets the user profile to the logged in user."""
-
-        serializer.save(user_profile=self.request.user)
+        if type(serializer.validated_data) == list:
+             for item in serializer.validated_data:
+                  item.update({'user_profile': self.request.user})
+        else:
+            serializer.validated_data.update({'user_profile': self.request.user})
+        serializer.save()
